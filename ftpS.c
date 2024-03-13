@@ -30,7 +30,7 @@ int verifyPort(char* buffer)
 {
     int len = sizeof(buffer);
     int port = 0;
-    for(int i=0;i<len;i++)
+    for(int i=0;i<len && buffer[i]!='\0';i++)
     {
         if(!isDigit(buffer[i]))
         {
@@ -48,13 +48,13 @@ int verifyPort(char* buffer)
 // control socket functionality
 void handleConnection(int clientC_FD)
 {
-    char buffer[MAX],server_response;
+    char buffer[MAX],server_response[MAX];
     bzero(buffer,MAX);
     bzero(server_response,MAX);
 
     //receive port Y from client
     recv(clientC_FD,buffer,sizeof(buffer),0);
-
+    
     int code = verifyPort(buffer);
     sprintf(server_response,"%d",code);
 
