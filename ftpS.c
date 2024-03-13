@@ -17,84 +17,167 @@
 #include <dirent.h>
 #include <stdio.h>
 #define SERVER_CONTROL_PORT 50000
+#define CLIENT_DATA_PORT 55000
 #define MAX 81
+
 
 
 bool isDigit(char num)
 {
-    return (num>='0' && num<='9');
+    return (num >= '0' && num <= '9');
+}
+
+void parseFileName(char *buffer, char *filename, int i)
+{
+    strcpy(filename,buffer+i); // first i blocks contain command and space
 }
 
 // function to verify port of the client
-int verifyPort(char* buffer)
+int verifyPort(char *buffer)
 {
     int len = sizeof(buffer);
-    int port = 0;
-    for(int i=0;i<len && buffer[i]!='\0';i++)
+    int port = atoi(buffer);
+    /*for (int i = 0; i < len && buffer[i] != '\0'; i++)
     {
-        if(!isDigit(buffer[i]))
+        if (!isDigit(buffer[i]))
         {
-            return 503;  // invalid client response
+            return 503; // invalid client response
         }
-        port = port*10+(buffer[i]-'0');
+        port = port * 10 + (buffer[i] - '0');
+    }*/
+
+    if (port >= 1024 && port <= 65535)
+    {
+        printf("Port Y: %d\n",port);
+        return 200;
     }
-    
-    if(port >= 1024 && port <= 65535)
-    return 200;
-    else 
-    return 550;        // port invalid
+    else
+        return 550; // port invalid
+}
+
+int getServerDataSocket()
+{
+    int sockFD;
+
+    sockFD = socket(AF_INET,SOCK_STREAM,0);
+    if(sockFD<0)
+    {
+        printf("failed to create server data socket\n");
+        exit(0);
+    }
+
+    return sockFD;
+}
+
+// send file to the client
+void sendFileFunc(FILE *fp)
+{
+    char buffer[MAX];
+    int bytes_read;
+    struct sockaddr_in client_addr;
+
+    // create server data socket
+    int serverD_FD = getServerDataSocket();
+    bzero(&client_addr,sizeof(client_addr));
+
+    // assign port and ip
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    client_addr.sin_port = htons(CLIENT_DATA_PORT);
+
+    //connect with the client data port
+    if(connect(serverD_FD,(struct sockaddr *)&client_addr,sizeof(client_addr))<0)
+    {
+        printf("error connecting with server...\n");
+        exit(0);
+    }
+
+    // send blocks of data 
+    while ((bytes_read = fread(buffer + 3, sizeof(char), MAX, fp)) > 0) {
+        // Set flag character based on remaining data
+        buffer[0] = (feof(fp)) ? 'L' : '*';  // 'L' for last block, '*' for others
+
+        // Convert data length (excluding header) to network byte order
+        // | L/* | length | length | data | data...
+        short data_length = htons(bytes_read);
+        memcpy(buffer + 1, &data_length, sizeof(short));
+
+        // Send the entire block (header + data)
+        int bytes_sent = write(serverD_FD, buffer, MAX);
+        if (bytes_sent < 0) {
+            perror("send failed");
+            break;
+        }
+    }
+
 }
 
 // control socket functionality
 void handleConnection(int clientC_FD)
 {
-    char buffer[MAX],server_response[MAX];
-    bzero(buffer,MAX);
-    bzero(server_response,MAX);
+    char buffer[MAX], server_response[MAX];
+    bzero(buffer, MAX);
+    bzero(server_response, MAX);
+    // receive port Y from client
+    recv(clientC_FD, buffer, sizeof(buffer), 0);
 
-    //receive port Y from client
-    recv(clientC_FD,buffer,sizeof(buffer),0);
-    
     int code = verifyPort(buffer);
-    sprintf(server_response,"%d",code);
+    sprintf(server_response, "%d", code);
 
-    //send code 
-    write(clientC_FD,server_response,sizeof(server_response));
+    // send code
+    write(clientC_FD, server_response, sizeof(server_response));
+    //printf("Connected with client\n");
 
-    while(1)
+    while (1)
     {
-        bzero(buffer,MAX);
-        recv(clientC_FD,buffer,sizeof(buffer),0);
-        if( buffer[0]=='c' && buffer[1]=='d')
+        bzero(buffer, MAX);
+        recv(clientC_FD, buffer, sizeof(buffer), 0);
+        if (buffer[0] == 'c' && buffer[1] == 'd')
         {
+        }
+        else if (buffer[0] == 'g' && buffer[1] == 'e' && buffer[2] == 't')
+        {
+            char filename[20];
+            //parse filename
+            parseFileName(buffer,filename,4);
+            printf("%s\n",filename);
+            FILE* fp =fopen(filename,"rb");
+            if(fp == NULL)
+            {
+                strcpy(server_response,"550");
+                write(clientC_FD,server_response,sizeof(server_response));
+                break;
+            }
+            else
+            {
+                strcpy(server_response,"201");
+                write(clientC_FD,server_response,sizeof(server_response));
+            }
+            sleep(1); // wait for client to create data socket
+
+            sendFileFunc(fp);
+            fclose(fp);
 
         }
-        else if(buffer[0]=='g' && buffer[1]=='e' && buffer[2]=='t')
+        else if (buffer[0] == 'p' && buffer[1] == 'u' && buffer[2] == 't')
         {
-            
         }
-        else if( buffer[0]=='p' && buffer[1]=='u' && buffer[2]=='t')
+        else if (buffer[0] == 'q' && buffer[1] == 'u' && buffer[2] == 'i' && buffer[3] == 't')
         {
+            strcpy(server_response,"421");
 
-        }
-        else if( buffer[0]=='q' && buffer[1]=='u' && buffer[2]=='i' && buffer[3]=='t')
-        {
-            bzero(server_response,MAX);
-            strcat(server_response,"421");
-            
-            write(clientC_FD,server_response,sizeof(server_response));
+            write(clientC_FD, server_response, sizeof(server_response));
             break;
         }
         else
         {
-            bzero(server_response,MAX);
-            strcat(server_response,"502");       // invalid request
+            bzero(server_response, MAX);
+            strcat(server_response, "502"); // invalid request
 
-            write(clientC_FD,server_response,sizeof(server_response));
+            write(clientC_FD, server_response, sizeof(server_response));
         }
     }
-    close(clientC_FD);
-    return ;
+    return;
 }
 
 int main()
@@ -136,16 +219,18 @@ int main()
     }
     printf("server listening... \n");
 
-    len = sizeof(clientC_FD);
-    while(clientC_FD = accept(sockC_FD, (struct socketaddr *)&clientC_FD, &len))
+    len = sizeof(client_addr);
+    while (clientC_FD = accept(sockC_FD, (struct sockaddr *)&client_addr, &len))
     {
+        
         handleConnection(clientC_FD);
     }
 
-    if(clientC_FD<0)
+    if (clientC_FD < 0)
     {
         printf("Error accepting client connection\n");
         exit(0);
     }
 
+    close(sockC_FD);
 }
