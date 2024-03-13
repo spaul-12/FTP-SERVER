@@ -90,6 +90,11 @@ void checkStatusCode(char *response, int clientC_FD)
         printf("\n file exists and ready for transfer\n\n");
         break;
     }
+    case 501:
+    {
+        printf("\nerror changing directory\n");
+        break;
+    }
     }
     return;
 }
@@ -176,12 +181,19 @@ void handleClientConnection(int clientC_FD)
         {
         case 1:
         {
-            /*prinntf("enter the command to change directory (like > cd path)\n");
+            printf("enter the command to change directory (like > cd path)\n");
             fflush(stdin);
             fgets(buffer, sizeof(buffer), stdin);  
             
             // Remove trailing newline (optional)
-            buffer[strcspn(buffer, "\n")] = '\0'; */
+            buffer[strcspn(buffer, "\n")] = '\0'; 
+
+            // send the command to the server
+            write(clientC_FD, buffer, sizeof(buffer));
+
+            // receive status code
+            recv(clientC_FD, response, sizeof(response), 0);
+            checkStatusCode(response, clientC_FD);
 
             break;
         }

@@ -132,8 +132,26 @@ void handleConnection(int clientC_FD)
     {
         bzero(buffer, MAX);
         recv(clientC_FD, buffer, sizeof(buffer), 0);
+
+        // options on server
         if (buffer[0] == 'c' && buffer[1] == 'd')
         {
+            char cmd[10];
+            strcpy(cmd,buffer+3);
+            if(chdir(cmd)<0)
+            {
+                strcpy(server_response,"501");
+                write(clientC_FD,server_response,sizeof(server_response));
+                break;
+            }
+            else
+            {
+                char dir[100];
+                printf("%s\n",getcwd(dir,sizeof(dir)));
+                strcpy(server_response,"200");
+                write(clientC_FD,server_response,sizeof(server_response));
+            }
+            
         }
         else if (buffer[0] == 'g' && buffer[1] == 'e' && buffer[2] == 't')
         {
