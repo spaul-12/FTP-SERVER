@@ -153,6 +153,56 @@ void getFile(int clientC_FD,char *buffer)
     close(clientD_FD);
 }
 
+void sendFile(char * filename)
+{
+    char buffer[MAX];
+    bzero(buffer, MAX);
+
+    struct sockaddr_in server_data_addr;
+    int serverD_FD, clientD_FD = getClientDataSocket();
+
+    if (listen(clientD_FD, 10) < 0)
+    {
+        printf("Data port listening error\n");
+        return;
+    }
+    else
+    {
+        printf("Data port started listening\n");
+    }
+
+    int len = sizeof(server_data_addr);
+    serverD_FD = accept(clientD_FD, (struct sockaddr *)&server_data_addr, &len);
+    if (serverD_FD < 0)
+    {
+        printf("error accepting server data port\n");
+        close(clientD_FD);
+        return;
+    }
+
+    // send blocks of data 
+    FILE *fp = fopen(filename,"rb");
+    int bytes_read;
+    while ((bytes_read = fread(buffer + 3, sizeof(char), MAX, fp)) > 0) {
+        // Set flag character based on remaining data
+        buffer[0] = (feof(fp)) ? 'L' : '*';  // 'L' for last block, '*' for others
+
+        // Convert data length (excluding header) to network byte order
+        // | L/* | length | length | data | data...
+        short data_length = htons(bytes_read);
+        memcpy(buffer + 1, &data_length, sizeof(short));
+
+        // Send the entire block (header + data)
+        int bytes_sent = write(serverD_FD, buffer, MAX);
+        if (bytes_sent < 0) {
+            perror("send failed");
+            break;
+        }
+    }
+
+
+}
+
 void handleClientConnection(int clientC_FD)
 {
     char buffer[MAX];
@@ -222,6 +272,25 @@ void handleClientConnection(int clientC_FD)
         }
         case 3:
         {
+            // ask user for file name
+            printf("enter the command (like > put filename)\n");
+            fflush(stdin);
+            //scanf("%[^\n]s",buffer);
+            //read(stdin,buffer,sizeof(buffer));
+            fgets(buffer, sizeof(buffer), stdin);  
+            
+            // Remove trailing newline (optional)
+            buffer[strcspn(buffer, "\n")] = '\0'; 
+
+            // send the command to the server
+            write(clientC_FD, buffer, sizeof(buffer));
+
+            // parse filename
+            char filename[20];
+            parseFileName(buffer,filename,4);
+
+            // send file function
+            sendFile(filename);
             break;
         }
         case 4:

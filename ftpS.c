@@ -112,6 +112,52 @@ void sendFileFunc(FILE *fp)
 
 }
 
+// receive file from the client
+void getFile(char *filename)
+{
+    char buffer[MAX];
+    int bytes_read;
+    struct sockaddr_in client_addr;
+
+    // create server data socket
+    int serverD_FD = getServerDataSocket();
+    bzero(&client_addr,sizeof(client_addr));
+
+    // assign port and ip
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    client_addr.sin_port = htons(CLIENT_DATA_PORT);
+
+    //connect with the client data port
+    if(connect(serverD_FD,(struct sockaddr *)&client_addr,sizeof(client_addr))<0)
+    {
+        printf("error connecting with server...\n");
+        exit(0);
+    }
+
+    FILE *fp = fopen("server.txt", "wb");  // Open file for writing in binary mode
+    while (1) {
+        int bytes_recv = recv(serverD_FD, buffer, MAX, 0);
+        //printf("%d\n",bytes_recv);
+        if (bytes_recv <= 0) {
+            break;
+        }
+
+        char flag = buffer[0];
+        short data_length = ntohs(*(short*)(buffer + 1));
+
+        // write data into file
+        fwrite(buffer + 3, sizeof(char), data_length, fp);  // Write received data to file
+        if (flag == 'L') {
+            // Last block received, break out of loop
+            break;
+        }
+    }
+
+    fclose(fp);
+    close(serverD_FD);
+}
+
 // control socket functionality
 void handleConnection(int clientC_FD)
 {
@@ -179,6 +225,15 @@ void handleConnection(int clientC_FD)
         }
         else if (buffer[0] == 'p' && buffer[1] == 'u' && buffer[2] == 't')
         {
+
+            char filename[20];
+            //parse filename
+            parseFileName(buffer,filename,4);
+
+            sleep(1);
+
+            getFile(filename);
+
         }
         else if (buffer[0] == 'q' && buffer[1] == 'u' && buffer[2] == 'i' && buffer[3] == 't')
         {
